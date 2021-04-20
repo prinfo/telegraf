@@ -1,4 +1,4 @@
-// selfstat is a package for tracking and collecting internal statistics
+// Package selfstat is a package for tracking and collecting internal statistics
 // about telegraf. Metrics can be registered using this package, and then
 // incremented or set within your code. If the inputs.internal plugin is enabled,
 // then all registered stats will be collected as they would by any other input
@@ -7,7 +7,6 @@ package selfstat
 
 import (
 	"hash/fnv"
-	"log"
 	"sort"
 	"sync"
 	"time"
@@ -17,7 +16,7 @@ import (
 )
 
 var (
-	registry *rgstry
+	registry *Registry
 )
 
 // Stat is an interface for dealing with telegraf statistics collected
@@ -96,12 +95,8 @@ func Metrics() []telegraf.Metric {
 				fields[fieldname] = stat.Get()
 				j++
 			}
-			metric, err := metric.New(name, tags, fields, now)
-			if err != nil {
-				log.Printf("E! Error creating selfstat metric: %s", err)
-				continue
-			}
-			metrics[i] = metric
+			m := metric.New(name, tags, fields, now)
+			metrics[i] = m
 			i++
 		}
 	}
@@ -109,12 +104,12 @@ func Metrics() []telegraf.Metric {
 	return metrics
 }
 
-type rgstry struct {
+type Registry struct {
 	stats map[uint64]map[string]Stat
 	mu    sync.Mutex
 }
 
-func (r *rgstry) register(measurement, field string, tags map[string]string) Stat {
+func (r *Registry) register(measurement, field string, tags map[string]string) Stat {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -137,7 +132,7 @@ func (r *rgstry) register(measurement, field string, tags map[string]string) Sta
 	return s
 }
 
-func (r *rgstry) registerTiming(measurement, field string, tags map[string]string) Stat {
+func (r *Registry) registerTiming(measurement, field string, tags map[string]string) Stat {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -160,7 +155,7 @@ func (r *rgstry) registerTiming(measurement, field string, tags map[string]strin
 	return s
 }
 
-func (r *rgstry) get(key uint64, field string) (Stat, bool) {
+func (r *Registry) get(key uint64, field string) (Stat, bool) {
 	if _, ok := r.stats[key]; !ok {
 		return nil, false
 	}
@@ -172,13 +167,12 @@ func (r *rgstry) get(key uint64, field string) (Stat, bool) {
 	return nil, false
 }
 
-func (r *rgstry) set(key uint64, s Stat) {
+func (r *Registry) set(key uint64, s Stat) {
 	if _, ok := r.stats[key]; !ok {
 		r.stats[key] = make(map[string]Stat)
 	}
 
 	r.stats[key][s.FieldName()] = s
-	return
 }
 
 func key(measurement string, tags map[string]string) uint64 {
@@ -201,7 +195,7 @@ func key(measurement string, tags map[string]string) uint64 {
 }
 
 func init() {
-	registry = &rgstry{
+	registry = &Registry{
 		stats: make(map[uint64]map[string]Stat),
 	}
 }

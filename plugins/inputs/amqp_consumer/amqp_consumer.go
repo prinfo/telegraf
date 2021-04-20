@@ -11,7 +11,7 @@ import (
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal"
-	"github.com/influxdata/telegraf/internal/tls"
+	"github.com/influxdata/telegraf/plugins/common/tls"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/influxdata/telegraf/plugins/parsers"
 	"github.com/streadway/amqp"
@@ -71,7 +71,7 @@ func (a *externalAuth) Mechanism() string {
 	return "EXTERNAL"
 }
 func (a *externalAuth) Response() string {
-	return fmt.Sprintf("\000")
+	return "\000"
 }
 
 const (
@@ -116,7 +116,7 @@ func (a *AMQPConsumer) SampleConfig() string {
 
   ## Additional exchange arguments.
   # exchange_arguments = { }
-  # exchange_arguments = {"hash_propery" = "timestamp"}
+  # exchange_arguments = {"hash_property" = "timestamp"}
 
   ## AMQP queue name.
   queue = "telegraf"
@@ -288,7 +288,7 @@ func (a *AMQPConsumer) connect(amqpConf *amqp.Config) (<-chan amqp.Delivery, err
 
 	ch, err := a.conn.Channel()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open a channel: %s", err.Error())
+		return nil, fmt.Errorf("failed to open a channel: %s", err.Error())
 	}
 
 	if a.Exchange != "" {
@@ -335,7 +335,7 @@ func (a *AMQPConsumer) connect(amqpConf *amqp.Config) (<-chan amqp.Delivery, err
 			nil,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to bind a queue: %s", err)
+			return nil, fmt.Errorf("failed to bind a queue: %s", err)
 		}
 	}
 
@@ -345,7 +345,7 @@ func (a *AMQPConsumer) connect(amqpConf *amqp.Config) (<-chan amqp.Delivery, err
 		false, // global
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to set QoS: %s", err)
+		return nil, fmt.Errorf("failed to set QoS: %s", err)
 	}
 
 	msgs, err := ch.Consume(
@@ -358,7 +358,7 @@ func (a *AMQPConsumer) connect(amqpConf *amqp.Config) (<-chan amqp.Delivery, err
 		nil,    // arguments
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Failed establishing connection to queue: %s", err)
+		return nil, fmt.Errorf("failed establishing connection to queue: %s", err)
 	}
 
 	return msgs, err
@@ -395,7 +395,7 @@ func declareExchange(
 		)
 	}
 	if err != nil {
-		return fmt.Errorf("Error declaring exchange: %v", err)
+		return fmt.Errorf("error declaring exchange: %v", err)
 	}
 	return nil
 }
@@ -437,7 +437,7 @@ func declareQueue(
 		)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Error declaring queue: %v", err)
+		return nil, fmt.Errorf("error declaring queue: %v", err)
 	}
 	return &queue, nil
 }

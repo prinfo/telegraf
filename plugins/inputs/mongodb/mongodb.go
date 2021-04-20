@@ -11,18 +11,20 @@ import (
 	"time"
 
 	"github.com/influxdata/telegraf"
-	tlsint "github.com/influxdata/telegraf/internal/tls"
+	tlsint "github.com/influxdata/telegraf/plugins/common/tls"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"gopkg.in/mgo.v2"
 )
 
 type MongoDB struct {
-	Servers          []string
-	Ssl              Ssl
-	mongos           map[string]*Server
-	GatherPerdbStats bool
-	GatherColStats   bool
-	ColStatsDbs      []string
+	Servers             []string
+	Ssl                 Ssl
+	mongos              map[string]*Server
+	GatherClusterStatus bool
+	GatherPerdbStats    bool
+	GatherColStats      bool
+	GatherTopStat       bool
+	ColStatsDbs         []string
 	tlsint.ClientConfig
 
 	Log telegraf.Logger
@@ -41,11 +43,20 @@ var sampleConfig = `
   ##   mongodb://10.10.3.33:18832,
   servers = ["mongodb://127.0.0.1:27017"]
 
+  ## When true, collect cluster status
+  ## Note that the query that counts jumbo chunks triggers a COLLSCAN, which
+  ## may have an impact on performance.
+  # gather_cluster_status = true
+
   ## When true, collect per database stats
   # gather_perdb_stats = false
 
   ## When true, collect per collection stats
   # gather_col_stats = false
+
+  ## When true, collect usage statistics for each collection
+  ## (insert, update, queries, remove, getmore, commands etc...).
+  # gather_top_stat = false
 
   ## List of db where collections stats are collected
   ## If empty, all db are concerned
@@ -73,8 +84,7 @@ var localhost = &url.URL{Host: "mongodb://127.0.0.1:27017"}
 // Returns one of the errors encountered while gather stats (if any).
 func (m *MongoDB) Gather(acc telegraf.Accumulator) error {
 	if len(m.Servers) == 0 {
-		m.gatherServer(m.getMongoServer(localhost), acc)
-		return nil
+		return m.gatherServer(m.getMongoServer(localhost), acc)
 	}
 
 	var wg sync.WaitGroup
@@ -115,7 +125,7 @@ func (m *MongoDB) getMongoServer(url *url.URL) *Server {
 	if _, ok := m.mongos[url.Host]; !ok {
 		m.mongos[url.Host] = &Server{
 			Log: m.Log,
-			Url: url,
+			URL: url,
 		}
 	}
 	return m.mongos[url.Host]
@@ -124,10 +134,10 @@ func (m *MongoDB) getMongoServer(url *url.URL) *Server {
 func (m *MongoDB) gatherServer(server *Server, acc telegraf.Accumulator) error {
 	if server.Session == nil {
 		var dialAddrs []string
-		if server.Url.User != nil {
-			dialAddrs = []string{server.Url.String()}
+		if server.URL.User != nil {
+			dialAddrs = []string{server.URL.String()}
 		} else {
-			dialAddrs = []string{server.Url.Host}
+			dialAddrs = []string{server.URL.Host}
 		}
 		dialInfo, err := mgo.ParseURL(dialAddrs[0])
 		if err != nil {
@@ -163,11 +173,7 @@ func (m *MongoDB) gatherServer(server *Server, acc telegraf.Accumulator) error {
 		// If configured to use TLS, add a dial function
 		if tlsConfig != nil {
 			dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-				conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
-				if err != nil {
-					fmt.Printf("error in Dial, %s\n", err.Error())
-				}
-				return conn, err
+				return tls.Dial("tcp", addr.String(), tlsConfig)
 			}
 		}
 
@@ -177,14 +183,18 @@ func (m *MongoDB) gatherServer(server *Server, acc telegraf.Accumulator) error {
 		}
 		server.Session = sess
 	}
-	return server.gatherData(acc, m.GatherPerdbStats, m.GatherColStats, m.ColStatsDbs)
+	return server.gatherData(acc, m.GatherClusterStatus, m.GatherPerdbStats, m.GatherColStats, m.GatherTopStat, m.ColStatsDbs)
 }
 
 func init() {
 	inputs.Add("mongodb", func() telegraf.Input {
 		return &MongoDB{
-			ColStatsDbs: []string{"local"},
-			mongos:      make(map[string]*Server),
+			mongos:              make(map[string]*Server),
+			GatherClusterStatus: true,
+			GatherPerdbStats:    false,
+			GatherColStats:      false,
+			GatherTopStat:       false,
+			ColStatsDbs:         []string{"local"},
 		}
 	})
 }

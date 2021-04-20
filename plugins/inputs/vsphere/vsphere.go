@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/influxdata/telegraf"
-	"github.com/influxdata/telegraf/internal"
-	"github.com/influxdata/telegraf/internal/tls"
+	"github.com/influxdata/telegraf/config"
+	"github.com/influxdata/telegraf/plugins/common/tls"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/vmware/govmomi/vim25/soap"
 )
@@ -47,15 +47,16 @@ type VSphere struct {
 	CustomAttributeInclude  []string
 	CustomAttributeExclude  []string
 	UseIntSamples           bool
-	IpAddresses             []string
+	IPAddresses             []string
+	MetricLookback          int
 
 	MaxQueryObjects         int
 	MaxQueryMetrics         int
 	CollectConcurrency      int
 	DiscoverConcurrency     int
 	ForceDiscoverOnInit     bool
-	ObjectDiscoveryInterval internal.Duration
-	Timeout                 internal.Duration
+	ObjectDiscoveryInterval config.Duration
+	Timeout                 config.Duration
 
 	endpoints []*Endpoint
 	cancel    context.CancelFunc
@@ -200,11 +201,11 @@ var sampleConfig = `
   ## separator character to use for measurement and field names (default: "_")
   # separator = "_"
 
-  ## number of objects to retreive per query for realtime resources (vms and hosts)
+  ## number of objects to retrieve per query for realtime resources (vms and hosts)
   ## set to 64 for vCenter 5.5 and 6.0 (default: 256)
   # max_query_objects = 256
 
-  ## number of metrics to retreive per query for non-realtime resources (clusters and datastores)
+  ## number of metrics to retrieve per query for non-realtime resources (clusters and datastores)
   ## set to 64 for vCenter 5.5 and 6.0 (default: 256)
   # max_query_metrics = 256
 
@@ -229,13 +230,19 @@ var sampleConfig = `
   ## Custom attributes from vCenter can be very useful for queries in order to slice the
   ## metrics along different dimension and for forming ad-hoc relationships. They are disabled
   ## by default, since they can add a considerable amount of tags to the resulting metrics. To
-  ## enable, simply set custom_attribute_exlude to [] (empty set) and use custom_attribute_include
+  ## enable, simply set custom_attribute_exclude to [] (empty set) and use custom_attribute_include
   ## to select the attributes you want to include.
   ## By default, since they can add a considerable amount of tags to the resulting metrics. To
-  ## enable, simply set custom_attribute_exlude to [] (empty set) and use custom_attribute_include
+  ## enable, simply set custom_attribute_exclude to [] (empty set) and use custom_attribute_include
   ## to select the attributes you want to include.
   # custom_attribute_include = []
   # custom_attribute_exclude = ["*"]
+
+  ## The number of vSphere 5 minute metric collection cycles to look back for non-realtime metrics. In 
+  ## some versions (6.7, 7.0 and possible more), certain metrics, such as cluster metrics, may be reported
+  ## with a significant delay (>30min). If this happens, try increasing this number. Please note that increasing
+  ## it too much may cause performance issues.
+  # metric_lookback = 3
 
   ## Optional SSL Config
   # ssl_ca = "/path/to/cafile"
@@ -258,7 +265,7 @@ func (v *VSphere) Description() string {
 
 // Start is called from telegraf core when a plugin is started and allows it to
 // perform initialization tasks.
-func (v *VSphere) Start(acc telegraf.Accumulator) error {
+func (v *VSphere) Start(_ telegraf.Accumulator) error {
 	v.Log.Info("Starting plugin")
 	ctx, cancel := context.WithCancel(context.Background())
 	v.cancel = cancel
@@ -315,7 +322,6 @@ func (v *VSphere) Gather(acc telegraf.Accumulator) error {
 			defer wg.Done()
 			err := endpoint.Collect(context.Background(), acc)
 			if err == context.Canceled {
-
 				// No need to signal errors if we were merely canceled.
 				err = nil
 			}
@@ -358,15 +364,16 @@ func init() {
 			CustomAttributeInclude:  []string{},
 			CustomAttributeExclude:  []string{"*"},
 			UseIntSamples:           true,
-			IpAddresses:             []string{},
+			IPAddresses:             []string{},
 
 			MaxQueryObjects:         256,
 			MaxQueryMetrics:         256,
 			CollectConcurrency:      1,
 			DiscoverConcurrency:     1,
+			MetricLookback:          3,
 			ForceDiscoverOnInit:     true,
-			ObjectDiscoveryInterval: internal.Duration{Duration: time.Second * 300},
-			Timeout:                 internal.Duration{Duration: time.Second * 60},
+			ObjectDiscoveryInterval: config.Duration(time.Second * 300),
+			Timeout:                 config.Duration(time.Second * 60),
 		}
 	})
 }

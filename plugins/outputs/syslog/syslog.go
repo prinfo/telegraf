@@ -7,19 +7,20 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/influxdata/go-syslog/v2/nontransparent"
 	"github.com/influxdata/go-syslog/v2/rfc5424"
 	"github.com/influxdata/telegraf"
-	"github.com/influxdata/telegraf/internal"
+	"github.com/influxdata/telegraf/config"
 	framing "github.com/influxdata/telegraf/internal/syslog"
-	tlsint "github.com/influxdata/telegraf/internal/tls"
+	tlsint "github.com/influxdata/telegraf/plugins/common/tls"
 	"github.com/influxdata/telegraf/plugins/outputs"
 )
 
 type Syslog struct {
 	Address             string
-	KeepAlivePeriod     *internal.Duration
+	KeepAlivePeriod     *config.Duration
 	DefaultSdid         string
 	DefaultSeverityCode uint8
 	DefaultFacilityCode uint8
@@ -64,13 +65,13 @@ var sampleConfig = `
   ## be one of "octet-counting", "non-transparent".
   # framing = "octet-counting"
 
-  ## The trailer to be expected in case of non-trasparent framing (default = "LF").
+  ## The trailer to be expected in case of non-transparent framing (default = "LF").
   ## Must be one of "LF", or "NUL".
   # trailer = "LF"
 
   ## SD-PARAMs settings
   ## Syslog messages can contain key/value pairs within zero or more
-  ## structured data sections.  For each unrecognised metric tag/field a
+  ## structured data sections.  For each unrecognized metric tag/field a
   ## SD-PARAMS is created.
   ##
   ## Example:
@@ -86,8 +87,8 @@ var sampleConfig = `
   # sdparam_separator = "_"
 
   ## Default sdid used for tags/fields that don't contain a prefix defined in
-  ## the explict sdids setting below If no default is specified, no SD-PARAMs
-  ## will be used for unrecognised field.
+  ## the explicit sdids setting below If no default is specified, no SD-PARAMs
+  ## will be used for unrecognized field.
   # default_sdid = "default@32473"
 
   ## List of explicit prefixes to extract from tag/field keys and use as the
@@ -149,13 +150,13 @@ func (s *Syslog) setKeepAlive(c net.Conn) error {
 	if !ok {
 		return fmt.Errorf("cannot set keep alive on a %s socket", strings.SplitN(s.Address, "://", 2)[0])
 	}
-	if s.KeepAlivePeriod.Duration == 0 {
+	if *s.KeepAlivePeriod == 0 {
 		return tcpc.SetKeepAlive(false)
 	}
 	if err := tcpc.SetKeepAlive(true); err != nil {
 		return err
 	}
-	return tcpc.SetKeepAlivePeriod(s.KeepAlivePeriod.Duration)
+	return tcpc.SetKeepAlivePeriod(time.Duration(*s.KeepAlivePeriod))
 }
 
 func (s *Syslog) Close() error {

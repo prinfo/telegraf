@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/influxdata/telegraf"
-	"github.com/influxdata/telegraf/internal"
+	"github.com/influxdata/telegraf/config"
 	"github.com/influxdata/telegraf/metric"
 	"github.com/influxdata/telegraf/testutil"
 	"github.com/stretchr/testify/assert"
@@ -19,8 +19,23 @@ func MustMetric(name string, tags map[string]string, fields map[string]interface
 	if fields == nil {
 		fields = map[string]interface{}{}
 	}
-	m, _ := metric.New(name, tags, fields, metricTime)
+	m := metric.New(name, tags, fields, metricTime)
 	return m
+}
+
+func TestTagAndField(t *testing.T) {
+	dateFormatTagAndField := Date{
+		TagKey:   "month",
+		FieldKey: "month",
+	}
+	err := dateFormatTagAndField.Init()
+	require.Error(t, err)
+}
+
+func TestNoOutputSpecified(t *testing.T) {
+	dateFormatNoOutput := Date{}
+	err := dateFormatNoOutput.Init()
+	require.Error(t, err)
 }
 
 func TestMonthTag(t *testing.T) {
@@ -43,25 +58,25 @@ func TestMonthTag(t *testing.T) {
 	assert.Equal(t, map[string]string{"month": month}, monthApply[2].Tags(), "should add tag 'month'")
 }
 
-func TestYearTag(t *testing.T) {
-	dateFormatYear := Date{
-		TagKey:     "year",
-		DateFormat: "2006",
+func TestMonthField(t *testing.T) {
+	dateFormatMonth := Date{
+		FieldKey:   "month",
+		DateFormat: "Jan",
 	}
 
-	err := dateFormatYear.Init()
+	err := dateFormatMonth.Init()
 	require.NoError(t, err)
 
 	currentTime := time.Now()
-	year := currentTime.Format("2006")
+	month := currentTime.Format("Jan")
 
-	m4 := MustMetric("foo", nil, nil, currentTime)
-	m5 := MustMetric("bar", nil, nil, currentTime)
-	m6 := MustMetric("baz", nil, nil, currentTime)
-	yearApply := dateFormatYear.Apply(m4, m5, m6)
-	assert.Equal(t, map[string]string{"year": year}, yearApply[0].Tags(), "should add tag 'year'")
-	assert.Equal(t, map[string]string{"year": year}, yearApply[1].Tags(), "should add tag 'year'")
-	assert.Equal(t, map[string]string{"year": year}, yearApply[2].Tags(), "should add tag 'year'")
+	m1 := MustMetric("foo", nil, nil, currentTime)
+	m2 := MustMetric("bar", nil, nil, currentTime)
+	m3 := MustMetric("baz", nil, nil, currentTime)
+	monthApply := dateFormatMonth.Apply(m1, m2, m3)
+	assert.Equal(t, map[string]interface{}{"month": month}, monthApply[0].Fields(), "should add field 'month'")
+	assert.Equal(t, map[string]interface{}{"month": month}, monthApply[1].Fields(), "should add field 'month'")
+	assert.Equal(t, map[string]interface{}{"month": month}, monthApply[2].Fields(), "should add field 'month'")
 }
 
 func TestOldDateTag(t *testing.T) {
@@ -78,11 +93,79 @@ func TestOldDateTag(t *testing.T) {
 	assert.Equal(t, map[string]string{"year": "1993"}, customDateApply[0].Tags(), "should add tag 'year'")
 }
 
+func TestFieldUnix(t *testing.T) {
+	dateFormatUnix := Date{
+		FieldKey:   "unix",
+		DateFormat: "unix",
+	}
+
+	err := dateFormatUnix.Init()
+	require.NoError(t, err)
+
+	currentTime := time.Now()
+	unixTime := currentTime.Unix()
+
+	m8 := MustMetric("foo", nil, nil, currentTime)
+	unixApply := dateFormatUnix.Apply(m8)
+	assert.Equal(t, map[string]interface{}{"unix": unixTime}, unixApply[0].Fields(), "should add unix time in s as field 'unix'")
+}
+
+func TestFieldUnixNano(t *testing.T) {
+	dateFormatUnixNano := Date{
+		FieldKey:   "unix_ns",
+		DateFormat: "unix_ns",
+	}
+
+	err := dateFormatUnixNano.Init()
+	require.NoError(t, err)
+
+	currentTime := time.Now()
+	unixNanoTime := currentTime.UnixNano()
+
+	m9 := MustMetric("foo", nil, nil, currentTime)
+	unixNanoApply := dateFormatUnixNano.Apply(m9)
+	assert.Equal(t, map[string]interface{}{"unix_ns": unixNanoTime}, unixNanoApply[0].Fields(), "should add unix time in ns as field 'unix_ns'")
+}
+
+func TestFieldUnixMillis(t *testing.T) {
+	dateFormatUnixMillis := Date{
+		FieldKey:   "unix_ms",
+		DateFormat: "unix_ms",
+	}
+
+	err := dateFormatUnixMillis.Init()
+	require.NoError(t, err)
+
+	currentTime := time.Now()
+	unixMillisTime := currentTime.UnixNano() / 1000000
+
+	m10 := MustMetric("foo", nil, nil, currentTime)
+	unixMillisApply := dateFormatUnixMillis.Apply(m10)
+	assert.Equal(t, map[string]interface{}{"unix_ms": unixMillisTime}, unixMillisApply[0].Fields(), "should add unix time in ms as field 'unix_ms'")
+}
+
+func TestFieldUnixMicros(t *testing.T) {
+	dateFormatUnixMicros := Date{
+		FieldKey:   "unix_us",
+		DateFormat: "unix_us",
+	}
+
+	err := dateFormatUnixMicros.Init()
+	require.NoError(t, err)
+
+	currentTime := time.Now()
+	unixMicrosTime := currentTime.UnixNano() / 1000
+
+	m11 := MustMetric("foo", nil, nil, currentTime)
+	unixMicrosApply := dateFormatUnixMicros.Apply(m11)
+	assert.Equal(t, map[string]interface{}{"unix_us": unixMicrosTime}, unixMicrosApply[0].Fields(), "should add unix time in us as field 'unix_us'")
+}
+
 func TestDateOffset(t *testing.T) {
 	plugin := &Date{
 		TagKey:     "hour",
 		DateFormat: "15",
-		DateOffset: internal.Duration{Duration: 2 * time.Hour},
+		DateOffset: config.Duration(2 * time.Hour),
 	}
 
 	err := plugin.Init()
